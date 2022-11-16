@@ -1,0 +1,17 @@
+**/*/readme-examples/
+**/*/test/
+*.test-helper.*
+*.test.*
+*.tsbuildinfo
+.*
+/*.tgz
+/Icon?
+/configs/
+/coverage/
+/cspell.config.js
+/graphics/
+/public/
+/src/
+bash-scripts/
+test-files/
+tsconfig*.json
