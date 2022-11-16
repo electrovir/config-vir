@@ -4,6 +4,7 @@ import chai, {assert} from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 import {remove} from 'fs-extra';
 import {describe} from 'mocha';
+import {join} from 'path';
 import {testConfigs} from './file-paths.test-helper';
 import {ConfigOperationLogEnum, defineConfigFile, LogCallbacks} from './index';
 
@@ -175,7 +176,7 @@ describe(defineConfigFile.name, () => {
             });
             await basicConfigFile.getWithUpdate(basicConfigFile.keys['test-key'], true);
             assert.deepStrictEqual(calledInputs, {
-                filePath: 'test-files/basic-config.json',
+                filePath: join('test-files', 'basic-config.json'),
                 propertyKey: basicConfigFile.keys['test-key'],
                 value: defaultTestValue,
             });
