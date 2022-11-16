@@ -203,6 +203,7 @@ export function defineConfigFile<
         async readWholeFile(): Promise<Partial<Record<AllowedKeys, JsonValueGeneric>>> {
             return await readJson<any>(inputs.filePath);
         },
+        initFile,
     };
 
     return definition;

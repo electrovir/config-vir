@@ -24,6 +24,7 @@ export type ConfigFileDefinition<JsonValueGeneric extends JsonValue, AllowedKeys
         loggingEnabled?: boolean | undefined,
     ): Promise<boolean>;
     readWholeFile(): Promise<Partial<Record<AllowedKeys, JsonValueGeneric>>>;
+    initFile(): Promise<void>;
 } & (string extends AllowedKeys
     ? {}
     : {
