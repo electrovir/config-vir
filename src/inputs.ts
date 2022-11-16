@@ -28,7 +28,10 @@ export type LogCallbacks<
 export type TransformValueCallback<
     JsonValueGeneric extends JsonValue | unknown,
     AllowedKeys extends string,
-> = (params: {key: AllowedKeys; value: JsonValueGeneric}) => JsonValueGeneric;
+> = (params: {
+    key: AllowedKeys;
+    value: JsonValueGeneric;
+}) => JsonValueGeneric | Promise<JsonValueGeneric>;
 
 export type DefineConfigFileInputs<
     JsonValueGeneric extends JsonValue | unknown,

@@ -38,9 +38,9 @@ export function defineConfigFile<
         {} as Record<AllowedKeys, AllowedKeys>,
     );
 
-    function transformValue(key: AllowedKeys, value: JsonValueType): JsonValueType {
+    async function transformValue(key: AllowedKeys, value: JsonValueType): Promise<JsonValueType> {
         if (inputs.transformValueCallback) {
-            return inputs.transformValueCallback({key, value});
+            return await inputs.transformValueCallback({key, value});
         } else {
             return value;
         }
@@ -131,7 +131,7 @@ export function defineConfigFile<
                 });
             }
 
-            const returnValue = transformValue(propertyKey, value);
+            const returnValue = await transformValue(propertyKey, value);
 
             await updateValue(propertyKey, returnValue);
 
