@@ -29,15 +29,3 @@ export type TransformValueCallback<
     key: AllowedKeys;
     value: JsonValueGeneric;
 }) => JsonValueGeneric | Promise<JsonValueGeneric>;
-
-export type DefineConfigFileInputs<
-    JsonValueGeneric extends JsonValue,
-    AllowedKeys extends string,
-> = {
-    filePath: string;
-    allowedKeys: ReadonlyArray<AllowedKeys>;
-    createValueIfNoneCallback: () => JsonValueGeneric;
-    logRelativePath?: string | undefined;
-    logCallbacks?: LogCallbacks<JsonValueGeneric, AllowedKeys> | undefined;
-    transformValueCallback?: TransformValueCallback<JsonValueGeneric, AllowedKeys> | undefined;
-};

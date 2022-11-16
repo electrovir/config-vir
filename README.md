@@ -45,6 +45,7 @@ export const myConfigFile = defineConfigFile({
     // logCallbacks,
     // logRelativePath,
     // transformValueCallback,
+    // fileInitCallback,
 });
 ```
 

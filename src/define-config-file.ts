@@ -7,6 +7,11 @@ import {ConfigFileDefinition} from './definition';
 import {LogCallbacks, TransformValueCallback} from './inputs';
 import {ConfigOperationLogEnum, logConfigFileOperation, OperationValueType} from './logging';
 
+export type DefineConfigFileInputs<
+    JsonValueGeneric extends JsonValue,
+    AllowedKeys extends string,
+> = Parameters<typeof defineConfigFile<JsonValueGeneric, AllowedKeys>>[0];
+
 export function defineConfigFile<
     JsonValueGeneric extends JsonValue,
     AllowedKeys extends string,
@@ -17,6 +22,7 @@ export function defineConfigFile<
     logRelativePath?: string | undefined;
     logCallbacks?: LogCallbacks<JsonValueGeneric, AllowedKeys> | undefined;
     transformValueCallback?: TransformValueCallback<JsonValueGeneric, AllowedKeys> | undefined;
+    fileInitCallback?: (filePath: string) => Promise<void> | void;
 }): ConfigFileDefinition<JsonValueGeneric, AllowedKeys> {
     const logRelativePath = inputs.logRelativePath || process.cwd();
 
@@ -64,6 +70,17 @@ export function defineConfigFile<
         return rawContents;
     }
 
+    async function initFile() {
+        if (inputs.fileInitCallback) {
+            await inputs.fileInitCallback(inputs.filePath);
+        }
+
+        // ensure the file is created even after the init callback
+        if (!existsSync(inputs.filePath)) {
+            await writeJson(inputs.filePath, {});
+        }
+    }
+
     async function updateValue(
         propertyKey: AllowedKeys,
         value: JsonValueGeneric,
@@ -78,6 +95,10 @@ export function defineConfigFile<
         filePath: inputs.filePath,
         async deleteProperty(propertyKey: AllowedKeys, loggingEnabled?: boolean): Promise<boolean> {
             checkKey(propertyKey);
+
+            if (existsSync(inputs.filePath)) {
+                return false;
+            }
 
             const fileContents = await getCurrentJson();
 
@@ -119,7 +140,7 @@ export function defineConfigFile<
 
             if (!existsSync(inputs.filePath)) {
                 logOperation(ConfigOperationLogEnum.onFileCreation, undefined);
-                await writeJson(inputs.filePath, {});
+                await initFile();
             }
 
             const fileContents = await getCurrentJson();
@@ -148,6 +169,10 @@ export function defineConfigFile<
             loggingEnabled?: boolean,
         ): Promise<JsonValueGeneric | undefined> {
             checkKey(propertyKey);
+
+            if (!existsSync(inputs.filePath)) {
+                return undefined;
+            }
 
             const value = (await getCurrentJson())[propertyKey];
 
