@@ -10,7 +10,7 @@ export enum ConfigOperationLogEnum {
 }
 
 export type ConfigOperationLogCallback<
-    JsonValueGeneric extends JsonValue | unknown,
+    JsonValueGeneric extends JsonValue,
     AllowedKeys extends string,
     IncludeValue extends boolean = true,
 > =
@@ -23,7 +23,7 @@ export type ConfigOperationLogCallback<
 
 export type OperationValueType<
     OperationGeneric extends ConfigOperationLogEnum,
-    JsonValueGeneric extends JsonValue | unknown,
+    JsonValueGeneric extends JsonValue,
 > = Parameters<
     NonNullable<
         NonNullable<
@@ -34,7 +34,7 @@ export type OperationValueType<
 
 export function logConfigFileOperation<
     OperationGeneric extends ConfigOperationLogEnum,
-    JsonValueGeneric extends JsonValue | unknown,
+    JsonValueGeneric extends JsonValue,
     AllowedKeys extends string,
 >({
     propertyKey,

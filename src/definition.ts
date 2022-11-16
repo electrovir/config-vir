@@ -1,12 +1,7 @@
-import {ArrayElement} from '@augment-vir/common';
 import {JsonValue} from 'type-fest';
-import {DefineConfigFileInputs} from './inputs';
 
-export type ConfigFileDefinition<
-    JsonValueGeneric extends JsonValue | unknown,
-    AllowedKeys extends string,
-    DefinitionGeneric extends DefineConfigFileInputs<JsonValue, AllowedKeys>,
-> = {
+export type ConfigFileDefinition<JsonValueGeneric extends JsonValue, AllowedKeys extends string> = {
+    filePath: string;
     keys: Record<AllowedKeys, AllowedKeys>;
     /**
      * Gets the saved value.
@@ -18,13 +13,7 @@ export type ConfigFileDefinition<
     getWithUpdate: (
         propertyKey: AllowedKeys,
         loggingEnabled?: boolean,
-    ) => Promise<
-        DefinitionGeneric['createValueIfNoneCallback'] extends undefined
-            ? JsonValueGeneric | undefined
-            : 'createValueIfNoneCallback' extends keyof DefinitionGeneric
-            ? JsonValueGeneric
-            : JsonValueGeneric | undefined
-    >;
+    ) => Promise<JsonValueGeneric | undefined>;
     updateValue(propertyKey: AllowedKeys, value: JsonValueGeneric): Promise<JsonValueGeneric>;
     /** For reading the current value. May return undefined. */
     readCurrentValue(
@@ -33,15 +22,3 @@ export type ConfigFileDefinition<
     ): Promise<JsonValueGeneric | undefined>;
     deleteProperty(propertyKey: AllowedKeys, loggingEnabled?: boolean): Promise<boolean>;
 };
-
-export type JsonValueFromDefinitionInputs<
-    DefinitionGeneric extends DefineConfigFileInputs<
-        JsonValue,
-        // this value type doesn't care what the type of AllowedKeys is
-        any
-    >,
-> = ReturnType<DefinitionGeneric['createValueIfNoneCallback']>;
-
-export type AllowedKeysFromDefinitionInputs<
-    DefinitionInputGeneric extends DefineConfigFileInputs<JsonValue, string>,
-> = ArrayElement<DefinitionInputGeneric['allowedKeys']>;

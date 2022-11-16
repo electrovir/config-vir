@@ -1,10 +1,7 @@
 import {JsonValue} from 'type-fest';
 import {ConfigOperationLogCallback, ConfigOperationLogEnum} from './logging';
 
-export type LogCallbacks<
-    JsonValueGeneric extends JsonValue | unknown,
-    AllowedKeys extends string,
-> = Partial<{
+export type LogCallbacks<JsonValueGeneric extends JsonValue, AllowedKeys extends string> = Partial<{
     [ConfigOperationLogEnum.onFileCreation]: ConfigOperationLogCallback<
         JsonValueGeneric,
         AllowedKeys,
@@ -26,7 +23,7 @@ export type LogCallbacks<
 }>;
 
 export type TransformValueCallback<
-    JsonValueGeneric extends JsonValue | unknown,
+    JsonValueGeneric extends JsonValue,
     AllowedKeys extends string,
 > = (params: {
     key: AllowedKeys;
@@ -34,7 +31,7 @@ export type TransformValueCallback<
 }) => JsonValueGeneric | Promise<JsonValueGeneric>;
 
 export type DefineConfigFileInputs<
-    JsonValueGeneric extends JsonValue | unknown,
+    JsonValueGeneric extends JsonValue,
     AllowedKeys extends string,
 > = {
     filePath: string;

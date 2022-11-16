@@ -3,6 +3,7 @@ import {randomString} from '@augment-vir/node-js';
 import chai, {assert} from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 import {remove} from 'fs-extra';
+import {writeFile} from 'fs/promises';
 import {describe} from 'mocha';
 import {join} from 'path';
 import {testConfigs} from './file-paths.test-helper';
@@ -12,7 +13,7 @@ import {TransformValueCallback} from './inputs';
 chai.use(chaiAsPromised);
 
 describe(defineConfigFile.name, () => {
-    const defaultTestValue = 'test-value';
+    const defaultTestValue: string = 'test-value';
 
     function testWithBasicConfigFile({
         ignoreCallbacks,
@@ -119,7 +120,20 @@ describe(defineConfigFile.name, () => {
                 testUpdateValue,
             );
 
-            await remove(testConfigs.basic);
+            const testDefinition = defineConfigFile({
+                allowedKeys: [
+                    'test-key',
+                    'test-key2',
+                ] as const,
+                filePath: testConfigs.basic,
+                createValueIfNoneCallback: () => {
+                    return defaultTestValue;
+                },
+                transformValueCallback: ({key, value}) => {
+                    const thing: string = value;
+                    return thing;
+                },
+            });
         }),
     );
 
@@ -199,6 +213,17 @@ describe(defineConfigFile.name, () => {
         'should not error if no log callbacks are provided',
         testWithBasicConfigFile({ignoreCallbacks: true})(async (basicConfigFile) => {
             await basicConfigFile.getWithUpdate(basicConfigFile.keys['test-key'], true);
+        }),
+    );
+
+    it(
+        'should fail if the json file has incorrect types',
+        testWithBasicConfigFile({ignoreCallbacks: true})(async (basicConfigFile) => {
+            await writeFile(basicConfigFile.filePath, JSON.stringify(['hello']));
+            await assert.isRejected(
+                basicConfigFile.getWithUpdate(basicConfigFile.keys['test-key'], true),
+                /^Cannot use file/,
+            );
         }),
     );
 
