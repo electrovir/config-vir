@@ -7,13 +7,20 @@ import {describe} from 'mocha';
 import {join} from 'path';
 import {testConfigs} from './file-paths.test-helper';
 import {ConfigOperationLogEnum, defineConfigFile, LogCallbacks} from './index';
+import {TransformValueCallback} from './inputs';
 
 chai.use(chaiAsPromised);
 
 describe(defineConfigFile.name, () => {
     const defaultTestValue = 'test-value';
 
-    function testWithBasicConfigFile(ignoreCallbacks?: boolean) {
+    function testWithBasicConfigFile({
+        ignoreCallbacks,
+        transformCallback,
+    }: {
+        ignoreCallbacks?: boolean;
+        transformCallback?: TransformValueCallback<any, string>;
+    } = {}) {
         const logCallbacks: LogCallbacks<any, any> = {};
 
         const basicConfigFile = defineConfigFile({
@@ -25,6 +32,7 @@ describe(defineConfigFile.name, () => {
             createValueIfNoneCallback: () => {
                 return defaultTestValue;
             },
+            transformValueCallback: transformCallback,
             ...(ignoreCallbacks
                 ? {}
                 : {
@@ -189,8 +197,23 @@ describe(defineConfigFile.name, () => {
 
     it(
         'should not error if no log callbacks are provided',
-        testWithBasicConfigFile(true)(async (basicConfigFile) => {
+        testWithBasicConfigFile({ignoreCallbacks: true})(async (basicConfigFile) => {
             await basicConfigFile.getWithUpdate(basicConfigFile.keys['test-key'], true);
+        }),
+    );
+
+    it(
+        'should use transform callback',
+        testWithBasicConfigFile({
+            ignoreCallbacks: true,
+            transformCallback: ({value}) => {
+                return `${value}-42`;
+            },
+        })(async (basicConfigFile) => {
+            assert.strictEqual(
+                await basicConfigFile.getWithUpdate(basicConfigFile.keys['test-key'], true),
+                `${defaultTestValue}-42`,
+            );
         }),
     );
 });

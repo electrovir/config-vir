@@ -25,13 +25,19 @@ export type LogCallbacks<
     >;
 }>;
 
+export type TransformValueCallback<
+    JsonValueGeneric extends JsonValue | unknown,
+    AllowedKeys extends string,
+> = (params: {key: AllowedKeys; value: JsonValueGeneric}) => JsonValueGeneric;
+
 export type DefineConfigFileInputs<
     JsonValueGeneric extends JsonValue | unknown,
     AllowedKeys extends string,
 > = {
     filePath: string;
     allowedKeys: ReadonlyArray<AllowedKeys>;
-    logRelativePath?: string;
-    logCallbacks?: LogCallbacks<JsonValueGeneric, AllowedKeys> | undefined;
     createValueIfNoneCallback: () => JsonValueGeneric;
+    logRelativePath?: string | undefined;
+    logCallbacks?: LogCallbacks<JsonValueGeneric, AllowedKeys> | undefined;
+    transformValueCallback?: TransformValueCallback<JsonValueGeneric, AllowedKeys> | undefined;
 };

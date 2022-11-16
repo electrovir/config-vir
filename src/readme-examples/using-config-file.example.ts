@@ -14,13 +14,17 @@ async function doStuff() {
      * Get the value stored in the config file under property `myConfigFile.keys.a` OR create a new
      * value using the pre-defined `createValueIfNoneCallback`. Because of this, `getWithUpdate`
      * always returns the given config value type, it's never possibly undefined.
+     *
+     * This method also applies `transformValueCallback` if it has been defined.
+     *
+     * This will also create the file if it does not exist.
      */
     await myConfigFile.getWithUpdate(myConfigFile.keys.a);
 
     /**
      * Read the current value in the config file under property `myConfigFile.keys.a` without any
-     * other operations. This will return undefined if the property has no value in the config
-     * file.
+     * other operations. This will return undefined if the property has no value in the config file
+     * or if the config file does not exist on the file system.
      */
     await myConfigFile.readCurrentValue(myConfigFile.keys.a);
 

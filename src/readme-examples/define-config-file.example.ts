@@ -21,4 +21,9 @@ export const myConfigFile = defineConfigFile({
      * format regardless of the file extension.
      */
     filePath: './path/to/file.json',
+
+    /** Extra, optional, options listed below. See TS types for how to use. */
+    // logCallbacks,
+    // logRelativePath,
+    // transformValueCallback,
 });

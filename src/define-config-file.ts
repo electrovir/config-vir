@@ -38,6 +38,14 @@ export function defineConfigFile<
         {} as Record<AllowedKeys, AllowedKeys>,
     );
 
+    function transformValue(key: AllowedKeys, value: JsonValueType): JsonValueType {
+        if (inputs.transformValueCallback) {
+            return inputs.transformValueCallback({key, value});
+        } else {
+            return value;
+        }
+    }
+
     function checkKey(key: AllowedKeys) {
         if (!inputs.allowedKeys.includes(key)) {
             throw new Error(
@@ -49,6 +57,15 @@ export function defineConfigFile<
                 )}`,
             );
         }
+    }
+
+    async function updateValue(
+        propertyKey: AllowedKeys,
+        value: JsonValueType,
+    ): Promise<JsonValueType> {
+        checkKey(propertyKey);
+        await appendJson(inputs.filePath, {[propertyKey]: value});
+        return value;
     }
 
     const definition: ConfigFileDefinition<JsonValueType, AllowedKeys, DefinitionInputGeneric> = {
@@ -101,19 +118,24 @@ export function defineConfigFile<
 
             const fileContents = await readJson(inputs.filePath);
 
-            if (propertyKey in fileContents) {
-                const value = fileContents[propertyKey];
-                logOperation(ConfigOperationLogEnum.onPropertyAccess, value);
-                return value;
-            } else {
-                const newValue = inputs.createValueIfNoneCallback();
-                logOperation(ConfigOperationLogEnum.onPropertyUpdate, newValue);
-                await appendJson(inputs.filePath, {
-                    [propertyKey]: newValue,
-                });
+            let value: JsonValueType;
 
-                return newValue;
+            if (propertyKey in fileContents) {
+                value = fileContents[propertyKey];
+                logOperation(ConfigOperationLogEnum.onPropertyAccess, value);
+            } else {
+                value = inputs.createValueIfNoneCallback();
+                logOperation(ConfigOperationLogEnum.onPropertyUpdate, value);
+                await appendJson(inputs.filePath, {
+                    [propertyKey]: value,
+                });
             }
+
+            const returnValue = transformValue(propertyKey, value);
+
+            await updateValue(propertyKey, returnValue);
+
+            return returnValue;
         },
         async readCurrentValue(
             propertyKey: AllowedKeys,
@@ -132,11 +154,7 @@ export function defineConfigFile<
             });
             return value;
         },
-        async updateValue(propertyKey: AllowedKeys, value: JsonValueType): Promise<JsonValueType> {
-            checkKey(propertyKey);
-            await appendJson(inputs.filePath, {[propertyKey]: value});
-            return value;
-        },
+        updateValue,
     };
 
     return definition;
