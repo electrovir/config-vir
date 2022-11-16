@@ -1,6 +1,6 @@
 {
     "name": "config-vir",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "description": "Small package for creating typed json files in backend servers.",
     "keywords": [
         "config",

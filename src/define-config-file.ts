@@ -4,7 +4,7 @@ import {existsSync} from 'fs';
 import {basename} from 'path';
 import {JsonValue} from 'type-fest';
 import {ConfigFileDefinition} from './definition';
-import {LogCallbacks, TransformValueCallback} from './inputs';
+import {FileInitCallback, LogCallbacks, TransformValueCallback} from './inputs';
 import {ConfigOperationLogEnum, logConfigFileOperation, OperationValueType} from './logging';
 
 export type DefineConfigFileInputs<
@@ -14,19 +14,19 @@ export type DefineConfigFileInputs<
 
 export function defineConfigFile<
     JsonValueGeneric extends JsonValue,
-    AllowedKeys extends string,
+    AllowedKeys extends string = string,
 >(inputs: {
     filePath: string;
-    allowedKeys: ReadonlyArray<AllowedKeys>;
+    allowedKeys?: ReadonlyArray<AllowedKeys>;
     createValueIfNoneCallback: () => JsonValueGeneric;
     logRelativePath?: string | undefined;
     logCallbacks?: LogCallbacks<JsonValueGeneric, AllowedKeys> | undefined;
     transformValueCallback?: TransformValueCallback<JsonValueGeneric, AllowedKeys> | undefined;
-    fileInitCallback?: (filePath: string) => Promise<void> | void;
+    fileInitCallback?: FileInitCallback | undefined;
 }): ConfigFileDefinition<JsonValueGeneric, AllowedKeys> {
     const logRelativePath = inputs.logRelativePath || process.cwd();
 
-    const keys: Record<AllowedKeys, AllowedKeys> = inputs.allowedKeys.reduce(
+    const keys: Record<AllowedKeys, AllowedKeys> | undefined = inputs.allowedKeys?.reduce(
         (accum, currentKey) => {
             accum[currentKey] = currentKey;
             return accum;
@@ -45,7 +45,10 @@ export function defineConfigFile<
         }
     }
 
-    function checkKey(key: AllowedKeys) {
+    function checkKey(key: AllowedKeys): void {
+        if (!inputs.allowedKeys) {
+            return;
+        }
         if (!inputs.allowedKeys.includes(key)) {
             throw new Error(
                 `Key "${key}" is not allowed for config file "${basename(
@@ -91,12 +94,19 @@ export function defineConfigFile<
     }
 
     const definition: ConfigFileDefinition<JsonValueGeneric, AllowedKeys> = {
-        keys,
+        /**
+         * As cast here because the type for the keys property is too advanced for TypeScript to
+         * figure it out during this assignment.
+         */
+        keys: keys as any,
         filePath: inputs.filePath,
-        async deleteProperty(propertyKey: AllowedKeys, loggingEnabled?: boolean): Promise<boolean> {
+        async deleteProperty(
+            propertyKey: AllowedKeys,
+            loggingEnabled?: boolean | undefined,
+        ): Promise<boolean> {
             checkKey(propertyKey);
 
-            if (existsSync(inputs.filePath)) {
+            if (!existsSync(inputs.filePath)) {
                 return false;
             }
 
@@ -105,7 +115,8 @@ export function defineConfigFile<
             if (propertyKey in fileContents) {
                 logConfigFileOperation({
                     propertyKey,
-                    inputs,
+                    filePath: inputs.filePath,
+                    logCallbacks: inputs.logCallbacks,
                     loggingEnabled,
                     operation: ConfigOperationLogEnum.onPropertyDelete,
                     value: undefined,
@@ -120,7 +131,7 @@ export function defineConfigFile<
         },
         async getWithUpdate(
             propertyKey: AllowedKeys,
-            loggingEnabled?: boolean,
+            loggingEnabled?: boolean | undefined,
         ): Promise<JsonValueGeneric> {
             function logOperation<OperationGeneric extends ConfigOperationLogEnum>(
                 operation: OperationGeneric,
@@ -128,7 +139,8 @@ export function defineConfigFile<
             ) {
                 logConfigFileOperation({
                     propertyKey,
-                    inputs,
+                    filePath: inputs.filePath,
+                    logCallbacks: inputs.logCallbacks,
                     loggingEnabled,
                     operation,
                     value,
@@ -178,7 +190,8 @@ export function defineConfigFile<
 
             logConfigFileOperation({
                 propertyKey,
-                inputs,
+                filePath: inputs.filePath,
+                logCallbacks: inputs.logCallbacks,
                 loggingEnabled,
                 operation: ConfigOperationLogEnum.onPropertyAccess,
                 value,
@@ -187,6 +200,9 @@ export function defineConfigFile<
             return value;
         },
         updateValue,
+        async readWholeFile(): Promise<Partial<Record<AllowedKeys, JsonValueGeneric>>> {
+            return await readJson<any>(inputs.filePath);
+        },
     };
 
     return definition;

@@ -2,7 +2,6 @@ import {JsonValue} from 'type-fest';
 
 export type ConfigFileDefinition<JsonValueGeneric extends JsonValue, AllowedKeys extends string> = {
     filePath: string;
-    keys: Record<AllowedKeys, AllowedKeys>;
     /**
      * Gets the saved value.
      *
@@ -12,13 +11,21 @@ export type ConfigFileDefinition<JsonValueGeneric extends JsonValue, AllowedKeys
      */
     getWithUpdate: (
         propertyKey: AllowedKeys,
-        loggingEnabled?: boolean,
-    ) => Promise<JsonValueGeneric | undefined>;
+        loggingEnabled?: boolean | undefined,
+    ) => Promise<JsonValueGeneric>;
     updateValue(propertyKey: AllowedKeys, value: JsonValueGeneric): Promise<JsonValueGeneric>;
     /** For reading the current value. May return undefined. */
     readCurrentValue(
         propertyKey: AllowedKeys,
-        loggingEnabled?: boolean,
+        loggingEnabled?: boolean | undefined,
     ): Promise<JsonValueGeneric | undefined>;
-    deleteProperty(propertyKey: AllowedKeys, loggingEnabled?: boolean): Promise<boolean>;
-};
+    deleteProperty(
+        propertyKey: AllowedKeys,
+        loggingEnabled?: boolean | undefined,
+    ): Promise<boolean>;
+    readWholeFile(): Promise<Partial<Record<AllowedKeys, JsonValueGeneric>>>;
+} & (string extends AllowedKeys
+    ? {}
+    : {
+          keys: Record<AllowedKeys, AllowedKeys>;
+      });

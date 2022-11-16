@@ -8,7 +8,7 @@ import {describe} from 'mocha';
 import {join} from 'path';
 import {testConfigs} from './file-paths.test-helper';
 import {ConfigOperationLogEnum, defineConfigFile, LogCallbacks} from './index';
-import {TransformValueCallback} from './inputs';
+import {FileInitCallback, TransformValueCallback} from './inputs';
 
 chai.use(chaiAsPromised);
 
@@ -17,10 +17,12 @@ describe(defineConfigFile.name, () => {
 
     function testWithBasicConfigFile({
         ignoreCallbacks,
-        transformCallback,
+        transformValueCallback,
+        fileInitCallback,
     }: {
         ignoreCallbacks?: boolean;
-        transformCallback?: TransformValueCallback<any, string>;
+        transformValueCallback?: TransformValueCallback<any, string>;
+        fileInitCallback?: FileInitCallback;
     } = {}) {
         const logCallbacks: LogCallbacks<any, any> = {};
 
@@ -33,7 +35,8 @@ describe(defineConfigFile.name, () => {
             createValueIfNoneCallback: () => {
                 return defaultTestValue;
             },
-            transformValueCallback: transformCallback,
+            transformValueCallback,
+            fileInitCallback,
             ...(ignoreCallbacks
                 ? {}
                 : {
@@ -231,7 +234,7 @@ describe(defineConfigFile.name, () => {
         'should use transform callback',
         testWithBasicConfigFile({
             ignoreCallbacks: true,
-            transformCallback: ({value}) => {
+            transformValueCallback: ({value}) => {
                 return `${value}-42`;
             },
         })(async (basicConfigFile) => {
@@ -241,4 +244,39 @@ describe(defineConfigFile.name, () => {
             );
         }),
     );
+
+    it(
+        'should use file init callback',
+        testWithBasicConfigFile({
+            ignoreCallbacks: true,
+            fileInitCallback: async (filePath) => {
+                await writeFile(filePath, JSON.stringify({derp: 'derp'}));
+            },
+        })(async (basicConfigFile) => {
+            await basicConfigFile.getWithUpdate(basicConfigFile.keys['test-key'], true);
+            const fullJson = await basicConfigFile.readWholeFile();
+            assert.deepStrictEqual(fullJson, {
+                [basicConfigFile.keys['test-key']]: defaultTestValue,
+                derp: 'derp',
+            } as any);
+        }),
+    );
+
+    it('should not have keys if there are none defined', async () => {
+        await remove(testConfigs.basic);
+        const basicConfigFile = defineConfigFile({
+            filePath: testConfigs.basic,
+            createValueIfNoneCallback: () => {
+                return defaultTestValue;
+            },
+        });
+
+        assert.strictEqual(basicConfigFile.filePath, testConfigs.basic);
+        assert.isUndefined(
+            // @ts-expect-error
+            basicConfigFile.keys,
+        );
+        assert.strictEqual(await basicConfigFile.getWithUpdate('anything'), defaultTestValue);
+        await remove(testConfigs.basic);
+    });
 });

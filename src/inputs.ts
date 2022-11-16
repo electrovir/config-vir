@@ -29,3 +29,5 @@ export type TransformValueCallback<
     key: AllowedKeys;
     value: JsonValueGeneric;
 }) => JsonValueGeneric | Promise<JsonValueGeneric>;
+
+export type FileInitCallback = (filePath: string) => Promise<void> | void;
