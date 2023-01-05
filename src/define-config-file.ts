@@ -28,11 +28,13 @@ export type DefineConfigFileInputs<
     fileInitCallback?: FileInitCallback | undefined;
 } & (
     | {
-          createValueIfNoneCallback: () => JsonValueGeneric;
+          createValueIfNoneCallback: () => JsonValueGeneric | Promise<JsonValueGeneric>;
           predefinedValues?: PredefinedValues<JsonValueGeneric, AllowedKeys>;
       }
     | {
-          createValueIfNoneCallback?: (() => JsonValueGeneric) | undefined;
+          createValueIfNoneCallback?:
+              | (() => JsonValueGeneric | Promise<JsonValueGeneric>)
+              | undefined;
           predefinedValues: NonNullable<PredefinedValues<JsonValueGeneric, AllowedKeys>>;
       }
 );
@@ -193,7 +195,7 @@ export function defineConfigFile<
                 ) {
                     value = inputs.predefinedValues[propertyKey] as JsonValueGeneric;
                 } else if (inputs.createValueIfNoneCallback) {
-                    value = inputs.createValueIfNoneCallback();
+                    value = await inputs.createValueIfNoneCallback();
                 } else {
                     throw new Error(
                         `Could not find or create any value for key '${propertyKey}' in config file '${inputs.filePath}'`,
