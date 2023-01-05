@@ -1,4 +1,9 @@
-import {isTypeOfWithArray, joinWithFinalConjunction} from '@augment-vir/common';
+import {
+    getObjectTypedKeys,
+    isTypeOfWithArray,
+    joinWithFinalConjunction,
+    typedHasProperty,
+} from '@augment-vir/common';
 import {appendJson, readJson, writeJson} from '@augment-vir/node-js';
 import {existsSync} from 'fs';
 import {basename} from 'path';
@@ -7,32 +12,51 @@ import {ConfigFileDefinition} from './definition';
 import {FileInitCallback, LogCallbacks, TransformValueCallback} from './inputs';
 import {ConfigOperationLogEnum, logConfigFileOperation, OperationValueType} from './logging';
 
+type PredefinedValues<JsonValueGeneric extends JsonValue, AllowedKeys extends string> = Partial<
+    Readonly<Record<AllowedKeys, JsonValueGeneric>>
+>;
+
 export type DefineConfigFileInputs<
     JsonValueGeneric extends JsonValue,
     AllowedKeys extends string,
-> = Parameters<typeof defineConfigFile<JsonValueGeneric, AllowedKeys>>[0];
-
-export function defineConfigFile<
-    JsonValueGeneric extends JsonValue,
-    AllowedKeys extends string = string,
->(inputs: {
+> = {
     filePath: string;
-    allowedKeys?: ReadonlyArray<AllowedKeys>;
-    createValueIfNoneCallback: () => JsonValueGeneric;
+    allowedKeys?: ReadonlyArray<AllowedKeys> | undefined;
     logRelativePath?: string | undefined;
     logCallbacks?: LogCallbacks<JsonValueGeneric, AllowedKeys> | undefined;
     transformValueCallback?: TransformValueCallback<JsonValueGeneric, AllowedKeys> | undefined;
     fileInitCallback?: FileInitCallback | undefined;
-}): ConfigFileDefinition<JsonValueGeneric, AllowedKeys> {
+} & (
+    | {
+          createValueIfNoneCallback: () => JsonValueGeneric;
+          predefinedValues?: PredefinedValues<JsonValueGeneric, AllowedKeys>;
+      }
+    | {
+          createValueIfNoneCallback?: (() => JsonValueGeneric) | undefined;
+          predefinedValues: NonNullable<PredefinedValues<JsonValueGeneric, AllowedKeys>>;
+      }
+);
+
+export function defineConfigFile<
+    JsonValueGeneric extends JsonValue,
+    AllowedKeys extends string = string,
+>(
+    inputs: DefineConfigFileInputs<JsonValueGeneric, AllowedKeys>,
+): ConfigFileDefinition<JsonValueGeneric, AllowedKeys> {
     const logRelativePath = inputs.logRelativePath || process.cwd();
 
-    const keys: Record<AllowedKeys, AllowedKeys> | undefined = inputs.allowedKeys?.reduce(
-        (accum, currentKey) => {
-            accum[currentKey] = currentKey;
-            return accum;
-        },
-        {} as Record<AllowedKeys, AllowedKeys>,
-    );
+    const shouldHaveKeys = inputs.allowedKeys || inputs.predefinedValues;
+    const maybeKeys = [
+        ...(inputs.allowedKeys || []),
+        ...getObjectTypedKeys(inputs.predefinedValues ?? {}),
+    ].reduce((accum, currentKey) => {
+        accum[currentKey] = currentKey;
+        return accum;
+    }, {} as Record<AllowedKeys, AllowedKeys>);
+
+    const keys: Record<AllowedKeys, AllowedKeys> | undefined = shouldHaveKeys
+        ? maybeKeys
+        : undefined;
 
     async function transformValue(
         key: AllowedKeys,
@@ -163,7 +187,19 @@ export function defineConfigFile<
                 value = fileContents[propertyKey];
                 logOperation(ConfigOperationLogEnum.onPropertyAccess, value);
             } else {
-                value = inputs.createValueIfNoneCallback();
+                if (
+                    inputs.predefinedValues &&
+                    typedHasProperty(inputs.predefinedValues, propertyKey)
+                ) {
+                    value = inputs.predefinedValues[propertyKey] as JsonValueGeneric;
+                } else if (inputs.createValueIfNoneCallback) {
+                    value = inputs.createValueIfNoneCallback();
+                } else {
+                    throw new Error(
+                        `Could not find or create any value for key '${propertyKey}' in config file '${inputs.filePath}'`,
+                    );
+                }
+
                 logOperation(ConfigOperationLogEnum.onPropertyUpdate, value);
                 await appendJson(inputs.filePath, {
                     [propertyKey]: value,

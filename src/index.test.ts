@@ -6,14 +6,19 @@ import {remove} from 'fs-extra';
 import {writeFile} from 'fs/promises';
 import {describe} from 'mocha';
 import {join} from 'path';
+import {IterableElement} from 'type-fest';
+import {DefineConfigFileInputs} from './define-config-file';
 import {testConfigs} from './file-paths.test-helper';
 import {ConfigOperationLogEnum, defineConfigFile, LogCallbacks} from './index';
-import {FileInitCallback, TransformValueCallback} from './inputs';
 
 chai.use(chaiAsPromised);
 
 describe(defineConfigFile.name, () => {
     const defaultTestValue: string = 'test-value';
+    const allowedKeys = [
+        'test-key',
+        'test-key2',
+    ] as const;
 
     function testWithBasicConfigFile({
         ignoreCallbacks,
@@ -21,16 +26,14 @@ describe(defineConfigFile.name, () => {
         fileInitCallback,
     }: {
         ignoreCallbacks?: boolean;
-        transformValueCallback?: TransformValueCallback<any, string>;
-        fileInitCallback?: FileInitCallback;
-    } = {}) {
+    } & Pick<
+        DefineConfigFileInputs<string, IterableElement<typeof allowedKeys>>,
+        'fileInitCallback' | 'transformValueCallback'
+    > = {}) {
         const logCallbacks: LogCallbacks<any, any> = {};
 
         const basicConfigFile = defineConfigFile({
-            allowedKeys: [
-                'test-key',
-                'test-key2',
-            ] as const,
+            allowedKeys,
             filePath: testConfigs.basic,
             createValueIfNoneCallback: () => {
                 return defaultTestValue;
@@ -129,12 +132,23 @@ describe(defineConfigFile.name, () => {
                     'test-key2',
                 ] as const,
                 filePath: testConfigs.basic,
+                predefinedValues: {
+                    'test-key': 'hello',
+                },
                 createValueIfNoneCallback: () => {
                     return defaultTestValue;
                 },
                 transformValueCallback: ({key, value}) => {
                     const thing: string = value;
                     return thing;
+                },
+            });
+
+            const invalidDefinition = defineConfigFile({
+                filePath: testConfigs.basic,
+                predefinedValues: {
+                    // @ts-expect-error
+                    validKey: /this is a regex/,
                 },
             });
         }),
@@ -277,6 +291,26 @@ describe(defineConfigFile.name, () => {
             basicConfigFile.keys,
         );
         assert.strictEqual(await basicConfigFile.getWithUpdate('anything'), defaultTestValue);
+        await remove(testConfigs.basic);
+    });
+
+    it('should use predefined values if they are provided', async () => {
+        await remove(testConfigs.basic);
+        const basicConfigFile = defineConfigFile({
+            filePath: testConfigs.basic,
+            predefinedValues: {
+                testKey: 'derp',
+                testKey2: 'other thing',
+            },
+        });
+
+        assert.strictEqual(basicConfigFile.filePath, testConfigs.basic);
+        assert.isDefined(basicConfigFile.keys);
+
+        await assert.isRejected(basicConfigFile.getWithUpdate('anything' as any));
+        assert.strictEqual(await basicConfigFile.getWithUpdate('testKey'), 'derp');
+        await writeFile(basicConfigFile.filePath, '');
+        assert.strictEqual(await basicConfigFile.getWithUpdate('testKey'), 'derp');
         await remove(testConfigs.basic);
     });
 });

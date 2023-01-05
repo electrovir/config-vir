@@ -28,5 +28,5 @@ export type ConfigFileDefinition<JsonValueGeneric extends JsonValue, AllowedKeys
 } & (string extends AllowedKeys
     ? {}
     : {
-          keys: Record<AllowedKeys, AllowedKeys>;
+          keys: Readonly<{[Prop in AllowedKeys]: Prop}>;
       });
