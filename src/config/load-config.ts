@@ -37,7 +37,7 @@ export async function loadConfig<const ConfigShape extends Shape>({
     fileType: forcedFileType,
     parseOptions,
     fetchOverride,
-}: Readonly<LoadConfigParams<ConfigShape>>): Promise<Shape['runtimeType']> {
+}: Readonly<LoadConfigParams<ConfigShape>>): Promise<ConfigShape['runtimeType']> {
     const loadPath = String(configPath);
 
     const contents = await parseConfigContents({
