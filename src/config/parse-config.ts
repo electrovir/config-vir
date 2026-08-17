@@ -1,7 +1,6 @@
 import {
     isRuntimeEnv,
     parseWithJson5,
-    randomString,
     RuntimeEnv,
     type MaybePromise,
     type PartialWithUndefined,
@@ -56,7 +55,12 @@ export async function parseConfigContents({
         }
     } else if (fileType === ConfigFileType.Js) {
         await clearNodeConfigModuleCache(configPath);
-        const module = await import(createFreshModuleImportPath(configPath));
+        const module = await import(
+            await createConfigModuleImportPath({
+                configPath,
+                fetchOverride,
+            })
+        );
         return module.default || module;
     } else if (fileType === ConfigFileType.Ts) {
         if (isRuntimeEnv(RuntimeEnv.Web)) {
@@ -68,7 +72,13 @@ export async function parseConfigContents({
                 '/esm/api',
             ].join('');
             const {tsImport} = await import(tsxApiSpecifier);
-            const module = await tsImport(createFreshModuleImportPath(configPath), import.meta.url);
+            const module = await tsImport(
+                await createConfigModuleImportPath({
+                    configPath,
+                    fetchOverride,
+                }),
+                import.meta.url,
+            );
 
             return module.default || module;
         }
@@ -106,10 +116,29 @@ async function clearNodeConfigModuleCache(configPath: string) {
     }
 }
 
-function createFreshModuleImportPath(configPath: string) {
+async function createConfigModuleImportPath({
+    configPath,
+    fetchOverride,
+}: Readonly<
+    {
+        configPath: string;
+    } & PartialWithUndefined<{
+        fetchOverride: typeof globalThis.fetch;
+    }>
+>) {
     const moduleUrl = new URL(configPath, import.meta.url);
+    const contents = await loadRawConfigContents(configPath, {
+        fetchOverride,
+    });
+    const contentsHash = Array.from(
+        new Uint8Array(
+            await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(contents)),
+        ),
+    )
+        .map((byte) => byte.toString(16).padStart(2, '0'))
+        .join('');
 
-    moduleUrl.searchParams.set('config-vir-reload', randomString());
+    moduleUrl.searchParams.set('config-vir-reload', contentsHash);
 
     return moduleUrl.href;
 }

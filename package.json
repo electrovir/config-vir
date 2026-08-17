@@ -1,6 +1,6 @@
 {
     "name": "config-vir",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "description": "Load a validated config file in many formats, including TypeScript.",
     "keywords": [
         "config",
