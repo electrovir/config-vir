@@ -1,6 +1,7 @@
 import {assert} from '@augment-vir/assert';
 import {describe, it} from '@augment-vir/test';
 import {mkdtemp, rm, writeFile} from 'node:fs/promises';
+import {createRequire} from 'node:module';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {ShapeMismatchError, defineShape} from 'object-shape-tester';
@@ -142,6 +143,59 @@ export default {source: configSource};`;
             fileExtension: 'cts',
             createContents: (source) => `module.exports = {source: '${source}'};`,
         });
+    });
+
+    it('keeps an unchanged local CommonJS config file cached', async () => {
+        const tempDirPath = await mkdtemp(join(tmpdir(), 'config-vir-'));
+        const configFilePath = join(tempDirPath, 'config.cjs');
+        const evaluationCountSymbol = Symbol.for('config-vir-unchanged-config-test');
+
+        try {
+            Reflect.deleteProperty(globalThis, evaluationCountSymbol);
+            await writeFile(
+                configFilePath,
+                `const evaluationCountSymbol = Symbol.for('${Symbol.keyFor(evaluationCountSymbol)}');
+globalThis[evaluationCountSymbol] = (globalThis[evaluationCountSymbol] || 0) + 1;
+module.exports = {evaluationCount: globalThis[evaluationCountSymbol]};`,
+            );
+
+            const configShape = defineShape({
+                evaluationCount: 0,
+            });
+            const firstConfig = await loadConfig({
+                configPath: configFilePath,
+                configShape,
+            });
+            const secondConfig = await loadConfig({
+                configPath: configFilePath,
+                configShape,
+            });
+
+            assert.deepEquals(
+                [
+                    firstConfig,
+                    secondConfig,
+                    createRequire(import.meta.url)(configFilePath),
+                ],
+                [
+                    {
+                        evaluationCount: 1,
+                    },
+                    {
+                        evaluationCount: 1,
+                    },
+                    {
+                        evaluationCount: 1,
+                    },
+                ],
+            );
+        } finally {
+            Reflect.deleteProperty(globalThis, evaluationCountSymbol);
+            await rm(tempDirPath, {
+                force: true,
+                recursive: true,
+            });
+        }
     });
 
     it('rejects a local config file that does not match its shape', async () => {

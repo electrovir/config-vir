@@ -12,6 +12,28 @@ import {FailedToParseConfigError} from '../errors/failed-to-parse-config.error.j
 import {ConfigFileType, deduceFileType, type ConfigParseOptions} from './file-type.js';
 import {determineReadSource, loadRawConfigContents} from './read-config.js';
 
+const cachedNodeConfigModuleHashes = new WeakMap<object, string>();
+
+type ConfigModule = UnknownObject &
+    PartialWithUndefined<{
+        default: UnknownObject;
+    }>;
+
+type ConfigModuleLoadParams = Readonly<
+    {
+        configPath: string;
+    } & PartialWithUndefined<{
+        fetchOverride: typeof globalThis.fetch;
+    }>
+>;
+
+const configModuleImporters: Readonly<
+    Partial<Record<ConfigFileType, (moduleImportPath: string) => Promise<ConfigModule>>>
+> = {
+    [ConfigFileType.Js]: importJavascriptConfigModule,
+    [ConfigFileType.Ts]: importTypescriptConfigModule,
+};
+
 /**
  * Parse config contents using the forced or deduced file type.
  *
@@ -53,41 +75,60 @@ export async function parseConfigContents({
         } catch (error) {
             throw new FailedToParseConfigError(configPath, error);
         }
-    } else if (fileType === ConfigFileType.Js) {
-        await clearNodeConfigModuleCache(configPath);
-        const module = await import(
-            await createConfigModuleImportPath({
-                configPath,
-                fetchOverride,
-            })
-        );
-        return module.default || module;
-    } else if (fileType === ConfigFileType.Ts) {
-        if (isRuntimeEnv(RuntimeEnv.Web)) {
-            throw new Error('Cannot execute TS configs in a browser.');
-        } else {
-            await clearNodeConfigModuleCache(configPath);
-            const tsxApiSpecifier = [
-                'tsx',
-                '/esm/api',
-            ].join('');
-            const {tsImport} = await import(tsxApiSpecifier);
-            const module = await tsImport(
-                await createConfigModuleImportPath({
-                    configPath,
-                    fetchOverride,
-                }),
-                import.meta.url,
-            );
-
-            return module.default || module;
-        }
     } else {
-        throw new Error(`No parser for config file type '${fileType}'`);
+        return loadExecutableConfigModule({
+            configPath,
+            fetchOverride,
+            fileType,
+        });
     }
 }
 
-async function clearNodeConfigModuleCache(configPath: string) {
+async function loadExecutableConfigModule({
+    configPath,
+    fetchOverride,
+    fileType,
+}: Readonly<
+    {
+        fileType: ConfigFileType;
+    } & ConfigModuleLoadParams
+>) {
+    const configModuleImporter = configModuleImporters[fileType];
+
+    if (!configModuleImporter) {
+        throw new Error(`No parser for config file type '${fileType}'`);
+    }
+
+    const configModuleImport = await createConfigModuleImport({
+        configPath,
+        fetchOverride,
+    });
+    const nodeConfigModuleCache = await getNodeConfigModuleCache(configPath);
+
+    const cachedConfigModule =
+        nodeConfigModuleCache?.configRequire.cache[nodeConfigModuleCache.resolvedConfigPath];
+
+    if (
+        nodeConfigModuleCache &&
+        (!cachedConfigModule ||
+            cachedNodeConfigModuleHashes.get(cachedConfigModule) !==
+                configModuleImport.contentsHash)
+    ) {
+        delete nodeConfigModuleCache.configRequire.cache[nodeConfigModuleCache.resolvedConfigPath];
+    }
+
+    const module = await configModuleImporter(configModuleImport.moduleImportPath);
+    const loadedConfigModule =
+        nodeConfigModuleCache?.configRequire.cache[nodeConfigModuleCache.resolvedConfigPath];
+
+    if (loadedConfigModule) {
+        cachedNodeConfigModuleHashes.set(loadedConfigModule, configModuleImport.contentsHash);
+    }
+
+    return module.default || module;
+}
+
+async function getNodeConfigModuleCache(configPath: string) {
     if (isRuntimeEnv(RuntimeEnv.Web)) {
         return;
     }
@@ -112,20 +153,16 @@ async function clearNodeConfigModuleCache(configPath: string) {
         const configRequire = (await import(nodeModuleSpecifier)).createRequire(import.meta.url);
         const resolvedConfigPath = configRequire.resolve(configFilePath);
 
-        delete configRequire.cache[resolvedConfigPath];
+        return {
+            configRequire,
+            resolvedConfigPath,
+        };
     }
+
+    return undefined;
 }
 
-async function createConfigModuleImportPath({
-    configPath,
-    fetchOverride,
-}: Readonly<
-    {
-        configPath: string;
-    } & PartialWithUndefined<{
-        fetchOverride: typeof globalThis.fetch;
-    }>
->) {
+async function createConfigModuleImport({configPath, fetchOverride}: ConfigModuleLoadParams) {
     const moduleUrl = new URL(configPath, import.meta.url);
     const contents = await loadRawConfigContents(configPath, {
         fetchOverride,
@@ -140,7 +177,29 @@ async function createConfigModuleImportPath({
 
     moduleUrl.searchParams.set('config-vir-reload', contentsHash);
 
-    return moduleUrl.href;
+    return {
+        contentsHash,
+        moduleImportPath: moduleUrl.href,
+        configPath,
+    };
+}
+
+async function importJavascriptConfigModule(moduleImportPath: string): Promise<ConfigModule> {
+    return await import(moduleImportPath);
+}
+
+async function importTypescriptConfigModule(moduleImportPath: string): Promise<ConfigModule> {
+    if (isRuntimeEnv(RuntimeEnv.Web)) {
+        throw new Error('Cannot execute TS configs in a browser.');
+    }
+
+    const tsxApiSpecifier = [
+        'tsx',
+        '/esm/api',
+    ].join('');
+    const {tsImport} = await import(tsxApiSpecifier);
+
+    return tsImport(moduleImportPath, import.meta.url);
 }
 
 /**
