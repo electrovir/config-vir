@@ -1,6 +1,7 @@
 import {
     isRuntimeEnv,
     parseWithJson5,
+    randomString,
     RuntimeEnv,
     type MaybePromise,
     type PartialWithUndefined,
@@ -10,7 +11,7 @@ import {parse as parseToml} from 'smol-toml';
 import {parse as parseYaml} from 'yaml';
 import {FailedToParseConfigError} from '../errors/failed-to-parse-config.error.js';
 import {ConfigFileType, deduceFileType, type ConfigParseOptions} from './file-type.js';
-import {loadRawConfigContents} from './read-config.js';
+import {determineReadSource, loadRawConfigContents} from './read-config.js';
 
 /**
  * Parse config contents using the forced or deduced file type.
@@ -54,24 +55,63 @@ export async function parseConfigContents({
             throw new FailedToParseConfigError(configPath, error);
         }
     } else if (fileType === ConfigFileType.Js) {
-        const module = await import(configPath);
+        await clearNodeConfigModuleCache(configPath);
+        const module = await import(createFreshModuleImportPath(configPath));
         return module.default || module;
     } else if (fileType === ConfigFileType.Ts) {
         if (isRuntimeEnv(RuntimeEnv.Web)) {
             throw new Error('Cannot execute TS configs in a browser.');
         } else {
+            await clearNodeConfigModuleCache(configPath);
             const tsxApiSpecifier = [
                 'tsx',
                 '/esm/api',
             ].join('');
             const {tsImport} = await import(tsxApiSpecifier);
-            const module = await tsImport(configPath, import.meta.url);
+            const module = await tsImport(createFreshModuleImportPath(configPath), import.meta.url);
 
             return module.default || module;
         }
     } else {
         throw new Error(`No parser for config file type '${fileType}'`);
     }
+}
+
+async function clearNodeConfigModuleCache(configPath: string) {
+    if (isRuntimeEnv(RuntimeEnv.Web)) {
+        return;
+    }
+
+    const configReadSource = determineReadSource(configPath);
+    /** Prevent bundlers from statically resolving Node-only imports in browser builds. */
+    const nodeUrlSpecifier = [
+        'node:',
+        'url',
+    ].join('');
+    const configFilePath =
+        configReadSource.readFilePath ||
+        (configReadSource.readFileUrl &&
+            (await import(nodeUrlSpecifier)).fileURLToPath(configReadSource.readFileUrl));
+
+    if (configFilePath) {
+        /** Prevent bundlers from statically resolving Node-only imports in browser builds. */
+        const nodeModuleSpecifier = [
+            'node:',
+            'module',
+        ].join('');
+        const configRequire = (await import(nodeModuleSpecifier)).createRequire(import.meta.url);
+        const resolvedConfigPath = configRequire.resolve(configFilePath);
+
+        delete configRequire.cache[resolvedConfigPath];
+    }
+}
+
+function createFreshModuleImportPath(configPath: string) {
+    const moduleUrl = new URL(configPath, import.meta.url);
+
+    moduleUrl.searchParams.set('config-vir-reload', randomString());
+
+    return moduleUrl.href;
 }
 
 /**
