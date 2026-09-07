@@ -133,16 +133,7 @@ async function getNodeConfigModuleCache(configPath: string) {
         return;
     }
 
-    const configReadSource = determineReadSource(configPath);
-    /** Prevent bundlers from statically resolving Node-only imports in browser builds. */
-    const nodeUrlSpecifier = [
-        'node:',
-        'url',
-    ].join('');
-    const configFilePath =
-        configReadSource.readFilePath ||
-        (configReadSource.readFileUrl &&
-            (await import(nodeUrlSpecifier)).fileURLToPath(configReadSource.readFileUrl));
+    const configFilePath = await resolveNodeConfigFilePath(configPath);
 
     if (configFilePath) {
         /** Prevent bundlers from statically resolving Node-only imports in browser builds. */
@@ -163,7 +154,8 @@ async function getNodeConfigModuleCache(configPath: string) {
 }
 
 async function createConfigModuleImport({configPath, fetchOverride}: ConfigModuleLoadParams) {
-    const moduleUrl = new URL(configPath, import.meta.url);
+    const moduleUrl =
+        (await createNodeConfigFileUrl(configPath)) || new URL(configPath, import.meta.url);
     const contents = await loadRawConfigContents(configPath, {
         fetchOverride,
     });
@@ -182,6 +174,51 @@ async function createConfigModuleImport({configPath, fetchOverride}: ConfigModul
         moduleImportPath: moduleUrl.href,
         configPath,
     };
+}
+
+async function resolveNodeConfigFilePath(configPath: string) {
+    if (isRuntimeEnv(RuntimeEnv.Web)) {
+        return;
+    }
+
+    const configReadSource = determineReadSource(configPath);
+    /** Prevent bundlers from statically resolving Node-only imports in browser builds. */
+    const nodeUrlSpecifier = [
+        'node:',
+        'url',
+    ].join('');
+    const unresolvedConfigFilePath =
+        configReadSource.readFilePath ||
+        (configReadSource.readFileUrl &&
+            (await import(nodeUrlSpecifier)).fileURLToPath(configReadSource.readFileUrl));
+
+    if (!unresolvedConfigFilePath) {
+        return;
+    }
+
+    /** Prevent bundlers from statically resolving Node-only imports in browser builds. */
+    const nodePathSpecifier = [
+        'node:',
+        'path',
+    ].join('');
+
+    return (await import(nodePathSpecifier)).resolve(unresolvedConfigFilePath);
+}
+
+async function createNodeConfigFileUrl(configPath: string) {
+    const configFilePath = await resolveNodeConfigFilePath(configPath);
+
+    if (!configFilePath) {
+        return;
+    }
+
+    /** Prevent bundlers from statically resolving Node-only imports in browser builds. */
+    const nodeUrlSpecifier = [
+        'node:',
+        'url',
+    ].join('');
+
+    return (await import(nodeUrlSpecifier)).pathToFileURL(configFilePath);
 }
 
 async function importJavascriptConfigModule(moduleImportPath: string): Promise<ConfigModule> {

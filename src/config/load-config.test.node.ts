@@ -3,7 +3,7 @@ import {describe, it} from '@augment-vir/test';
 import {mkdtemp, rm, writeFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+import {join, relative} from 'node:path';
 import {ShapeMismatchError, defineShape} from 'object-shape-tester';
 import {testConfigPaths} from './file-paths.mock.js';
 import {loadConfig} from './load-config.js';
@@ -12,15 +12,24 @@ type UpdatedConfigTestParams = {
     fileExtension: string;
     createContents: (source: string) => string;
     isModule?: boolean | undefined;
+    useRelativePath?: boolean | undefined;
 };
+
+function createTypescriptConfigContents(source: string) {
+    return `const configSource: string = '${source}';
+
+export default {source: configSource};`;
+}
 
 async function testUpdatedConfig({
     createContents,
     fileExtension,
     isModule = false,
+    useRelativePath = false,
 }: Readonly<UpdatedConfigTestParams>) {
     const tempDirPath = await mkdtemp(join(tmpdir(), 'config-vir-'));
     const configFilePath = join(tempDirPath, `config.${fileExtension}`);
+    const configPath = useRelativePath ? relative(process.cwd(), configFilePath) : configFilePath;
 
     try {
         if (isModule) {
@@ -30,7 +39,7 @@ async function testUpdatedConfig({
         await writeFile(configFilePath, createContents('first'));
         assert.deepEquals(
             await loadConfig({
-                configPath: configFilePath,
+                configPath,
                 configShape: defineShape({
                     source: '',
                 }),
@@ -43,7 +52,7 @@ async function testUpdatedConfig({
         await writeFile(configFilePath, createContents('second'));
         assert.deepEquals(
             await loadConfig({
-                configPath: configFilePath,
+                configPath,
                 configShape: defineShape({
                     source: '',
                 }),
@@ -122,12 +131,17 @@ describe(loadConfig.name, () => {
     it('reloads a changed local TypeScript config file', async () => {
         await testUpdatedConfig({
             fileExtension: 'ts',
-            createContents: (source) => {
-                return `const configSource: string = '${source}';
-
-export default {source: configSource};`;
-            },
+            createContents: createTypescriptConfigContents,
             isModule: true,
+        });
+    });
+
+    it('reloads a changed relative local TypeScript config file', async () => {
+        await testUpdatedConfig({
+            fileExtension: 'ts',
+            createContents: createTypescriptConfigContents,
+            isModule: true,
+            useRelativePath: true,
         });
     });
 
