@@ -36,3 +36,32 @@ const config = await loadConfig({
     }),
 });
 ```
+
+## Finding config files
+
+`findConfigFile` looks in one directory for a config file with any extension `loadConfig` can parse. `findConfigFilesUpward` does the same in each directory from a start directory up to a stop directory, nearest first. Both throw a `MultipleConfigFilesError` when one directory has two matches, such as `settings.json` and `settings.yaml`. Both are Node.js only.
+
+<!-- example-link: src/readme-examples/find-config.example.ts -->
+
+```TypeScript
+import {homedir} from 'node:os';
+import {defineShape} from 'object-shape-tester';
+import {findConfigFilesUpward, loadConfig} from 'config-vir';
+
+const settingsPaths = await findConfigFilesUpward({
+    startDirectory: process.cwd(),
+    stopDirectory: homedir(),
+    baseName: '.my-app/settings',
+});
+
+const settings = await Promise.all(
+    settingsPaths.map(async (configPath) => {
+        return await loadConfig({
+            configPath,
+            configShape: defineShape({
+                retryCount: 0,
+            }),
+        });
+    }),
+);
+```
